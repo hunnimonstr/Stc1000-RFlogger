@@ -1,9 +1,13 @@
-/*/* Test harness for Rf receiver to listen and log data received from stc100+ devices with a 433htz transmitter wired to the reprogramming header pins.
- *  Code based mainly on the WeatherSensorWH2 project by Mr Luc Small  who did all the hard work, this is based on luc's example code and code found in the arduino ide examples
+/* Beta harness for Rf receiver to listen and log data received from stc100+ devices 
+ * with a 433htz transmitter wired to the reprogramming header pins.
+ * This code based mainly on the WeatherSensorWH2 project by Mr Luc Small.  
+ * Luc did all the hard work, this is based on his example code and code found in the arduino ide examples
+ * once the weather station library has been installed
+ * github.com/lucsmall/WH2-Weather-Sensor-Library-for-Arduino
  *  GNU liscence http://www.fsf.org/ use freely for personal or free distribution
 *  no ideas to be used in commercial code.
  *
- *    Version 1.0 test
+ *    Version 1.0 Beta version
  *
  * OVERVIEW
  * a stand alone data logger to record timestamped data records to a csv file stored on a fat32
@@ -14,7 +18,15 @@
 * 3) Temperature in the units your stc is operating with C in my case
 * 4) the humidity data field (may contain data) with subsiquent updates of the stc1000+
 * other record info metadata and metrics can be outputted too the commands are commented * out using //
- * 5 x led interface 1)yellow Reception indicator,2) green record + write indicator,3) red1, error 4) red2,error 5) red3 error  (or any colours you prefer i have no red so will be using blue..)
+* 
+* INTERFACE
+* 
+* 5 x led interface 
+* 1)yellow Reception indicator,
+* 2) green record + write indicator,
+* 3) red1, error 
+* 4) red2,error 
+* 5) red3 error  (or any colours you prefer 
  * Normal/optimum operation
  *     when turned on all leds will light and the reds wil then light in 1,2,3 order to validate lamps and wirring
  *     the yellow led will light up while rtc checks are carried out, the green led will light while card and file system checks 
@@ -30,7 +42,7 @@
  * red1 red2 red3 lit no good record for 1 hour
  * red1 flashing with green flashing - No SDcard found or not recognising file system must be
   * fat16 or fat32 and some cards can be iffy
- * erd 1 flashing with yellow flashing - RTC error 1 time not set.
+ * red 1 flashing with yellow flashing - RTC error 1 time not set.
  * green on red1 flashing file open failure
  *
 * If an error condition is indicated plug into a puter with the arduino V1.065 ide installed and *
@@ -48,7 +60,7 @@
  * 1 x yellow led
  * 1 x green led
  * 3 x red led (blue)
- * 5 x resistors value to be confirmed, will depend on led's used.
+ * 5 x resistors value  1k ohm for yellow led 470k for red and green leds
  * a handful of sacraficial prototype wires
  * 2 x 20cm long single wire annenna (ive used 2 x 20cm jumper leads)
  * a box
@@ -77,8 +89,8 @@
  * Leds are connected +ve (longer leg) into Gpio pin sockets A1-5 (may change,,,)
  * Don't buy super brite leds really cheap low power ones are all thats needed unless you plan on sitting the logger under industrial lighting.
 *  led Pin Assignment
- * yellow A1
- * green A2
+ * yellow A2
+ * green A3
  * red1 d3
  * red2 d4
  * red3 d5  connect the -Ve shorter leg to its resistor and then to common ground (solder? or mini breadboard + hot glue gun??)
@@ -95,53 +107,42 @@
 #include <SD.h>
 #include <WeatherSensorWH2.h>
 
-// Global Var/Obj declarations
-
 #define RF_IN 2
 #define LED_PACKET A2
-#define LED_ACTIVITY  A3
-#define LED_RED1  3    // digital pins for red leds ** changed******
-#define LED_RED2  4
-#define LED_RED3  5
+#define LED_ACTIVITY A3
+#define LED_RED1 3    
+#define LED_RED2 4
+#define LED_RED3 5
 #define REC_CHK 0
 #define DISK_ERR 1
-#define CLK_ERR  2
+#define CLK_ERR 2
 #define FILE_ERR 3
 #define RST_RED 4
 
-
+//global vars and function declarations
 const int chipSelect = 10;                                  // Chip Select(Slave Select) SD card interface 4, 8, OR 10 ON OTHER BARDS check docs
 RTC_DS1307 rtc;                                             // Real Time Clock Instance
-// Rf Scan
-volatile byte got_interval = 0;                            // received Rf signal flag
-volatile byte interval = 0;                                // durration of rfsignal??
-volatile unsigned long old = 0, packet_count = 0;          // housekeeping vars used for record metrics
-volatile unsigned long spacing, now1, average_interval;    //
-volatile unsigned long errlastgoodrecord=millis();
-WeatherSensorWH2 STC1000;                                  // The weather Sensore object instance or stc1000 in our case
+volatile byte got_interval = 0;                             // received Rf signal flag
+volatile byte interval = 0;                                 // duration of rfsignal??
+volatile unsigned long old = 0, packet_count = 0;           // housekeeping vars used for record metrics
+volatile unsigned long spacing, now1, average_interval;     
+volatile unsigned long errlastgoodrecord=millis();          // record of last good recorord received/written set optimistically
+WeatherSensorWH2 STC1000;                                   // The weather Sensore object instance or stc1000 in our case
+volatile byte VERBOSE = false;                              // if true every valid received record will be logged Signal repeated 3 X per cycle
 
-volatile byte VERBOSE = false;        // if true every valid received record will be logged Signal repeated 3 X per cycle
-
-//  Function Declarations
-void setrtc();                          // sets the rtc to compile time or user entered time in code
-void signalstats();                     // compiles the crucial spacing stat amongst other packet data
-int logrecord();                       // open file and write the record
-void debugprint();                     // serial output of record and metadats 
-void chklastgoodrecord();              // redundant
-void dowarnings(int action);           //sets led warning status
-void Datetimetest();                  //  code for date time functions display to serial
-void ledtest();                       // light leds for startup test& delay
-//ISR system interupt on RFIN
-ISR(TIMER1_COMPA_vect)// Timer1  to monitor Rf In determines got_interval and interval vars
+void setrtc();                                              // sets the rtc to compile time or user entered time in code
+void signalstats();                                         // compiles the crucial spacing stat amongst other packet data
+int logrecord();                                            // open file and write the record
+void debugprint();                                          // serial output of record and metadats 
+void dowarnings(int action);                                //sets led warning status
+void Datetimetest();                                        //  code for date time functions display to serial
+void ledtest();                                             // light leds for startup test& delay
+void clocktest();                                           // validates/sets the clock is running
+void sdtest();
+ISR(TIMER1_COMPA_vect)// Timer1 synced with the frequency of the RF signal and sets got_signal flag and interval value.
 {
   static byte count = 0;
   static byte was_hi = 0;
-  /*
-   * triggers when an rf state changes?  and its durration/length saved in variable interval and
-   * sets the got interval flag true when set.
-   * think thats what its doing..
-   */
-
   if (digitalRead(RF_IN) == HIGH) {
     digitalWrite(LED_ACTIVITY, HIGH);
     count++;
@@ -156,96 +157,87 @@ ISR(TIMER1_COMPA_vect)// Timer1  to monitor Rf In determines got_interval and in
     }
   }
 }
-
-
-
+//****************************************************************************
 void setup () {
-  // IO PIN SETUP
-  pinMode(RF_IN, INPUT);
+
+  Serial.begin(9600);                                                  //start debug coms 
+  pinMode(RF_IN, INPUT);                                               // IO PIN SETUP
   pinMode(LED_PACKET, OUTPUT);
   pinMode(LED_ACTIVITY, OUTPUT);
   pinMode(LED_RED1, OUTPUT);
   pinMode(LED_RED2, OUTPUT);
   pinMode(LED_RED3, OUTPUT);
-  ledtest();                                                          // test all leds 
-
-  digitalWrite(LED_ACTIVITY,HIGH);                                     // yellow led for rtc test
-  Serial.begin(9600);                                                 
-  // RTC Setup  **
-#ifdef AVR
-  Wire.begin();
-#else
-  Wire1.begin();                                                      // Shield I2C pins connect to alt I2C bus on Arduino
-#endif
-  rtc.begin();
-  if (! rtc.isrunning()) {                                            // setting date time
-      setrtc();
-  }
-  if (! rtc.isrunning()) {                                            // clock still not up? do clock error
-    dowarnings(CLK_ERR );}
   
- Datetimetest();                                                   //chuck out verbose clock info via usb/serial for debugging
- digitalWrite(LED_ACTIVITY,LOW);                                   // turn off yellow clock check led 
-  // ********************************************************************************
-  //  SD Card Setup
-  ;                                     // start SD and light green led
-  digitalWrite(LED_PACKET, HIGH);
-  Serial.print("Initializing SD card...");
-  // see if the card is present and can be initialized:
-  if (!SD.begin(chipSelect)) {
-     dowarnings(DISK_ERR );}  
-  Serial.println("card initialized.");
-  //*******************************************************************************
-
-  // Rf interupt initialising the following assignments set up timer1 ISR above
-
-  TCCR1A = 0x00;
-  TCCR1B = 0x09;
-  TCCR1C = 0x00;
-  OCR1A = 399;
-  TIMSK1 = 0x02;
-
-  // enable interrupts
-  sei();
+  ledtest();                                                            // Test h/w. Rf failure will be evident by a quiet box. 
+  clocktest();
+  sdtest();
+  // interupt initialising the following assignments set up timer1 ISR above
+  // think it tunes a time to the frequency to listen on to determin if a start on mesage is braodcast..
+  TCCR1A = 0x00;  // still reading up on this.. 00 = sets it to default, 
+  TCCR1B = 0x09;  // 0x09 == 1001 == R/W and no prescaler on the timer
+  TCCR1C = 0x00;  // set the C register to empty
+  OCR1A = 399;    // -value set to compare match against?
+  TIMSK1 = 0x02;  //  controls which interrupts the timer can trigger 02 0010 = Compare/Match
+  sei();                                                                 // enable interrupts
 }
 
-
-
-
-
 void loop () {
-  
-  if (got_interval) {                                               // tests the got interval flag if true
+  if (got_interval) {                                               // tests the got interval flag if true set in the interupt on rf change
     STC1000.accept(interval);                                       // Listen? process? 'accept' from the RF input passing the interval generated in ISR interupt
     if (STC1000.acquired()) {                                       // If a valid record is aquiered print it to the log file..
       digitalWrite(LED_PACKET, HIGH);                               // Flash on Green led for record processing durration to indicate activity
       signalstats();                                                // get the signal stats
       if ((VERBOSE) || (spacing > 1500)) {                          // if all records OR last record was over 1500 m/s ago ( may need tuning towards 3000)
-        /* OR || Logic
-         * (Spacng > Test value)             TRUE | FALSE
-         *                  VERBOSE =TRUE  | True| True
-         *                  VERBOSE =False | True| False
+        /* OR (||) Logic                                            Do the loggng to file
+         *           (Spacng > Test value)   TRUE | FALSE
+         *                  ______________________|______           
+         *                  VERBOSE = TRUE  | True| True
+         *                  VERBOSE = FALSE | True| False
          */
-        // write data record.
-        if (logrecord()!=0){                                          // if record wtite fails
-            dowarnings(FILE_ERR);                                     // display file error
-            }                                                           // close if log record  not ok
+        if (logrecord()!=0){ dowarnings(FILE_ERR);}                 // Call logrecord display file error if logrecord fails
         else {                                                      // record write sucessfull.
-          errlastgoodrecord = millis();                             // time last good record read = now
-          dowarnings(RST_RED);                                      // reset any missed record warnings
-          }                                                           //CLOSE ELSE
+             errlastgoodrecord = millis();                          // time last good record read = now
+             dowarnings(RST_RED);                                   // reset any missed record warnings
+             }                                                      //CLOSE ELSE clause
         debugprint();                                               // SERIAL PRINT THE RECORD AND METADATA
-      }                                                             // close of if VERBOSE OR last record was over 1500 m/s ago ( may need tuningto 3000)
+        }                                                           // close of if VERBOSE OR last record was over 1500 m/s 
     }                                                               // close of aquiered
-    digitalWrite(LED_PACKET, LOW);                                  // turn off green led may need a small delay in advance to make green led activity signal visible
-    got_interval = 0;
+    got_interval = 0;                                               // add delay here to prolong green record accepted/recorded signal flash 
+    digitalWrite(LED_PACKET, LOW);                                  // turn off green led to indicate record received and written    
   }                                                                 // close of got interval test  may adjust timings??
-  dowarnings(REC_CHK);                                                // check last good record and warn accordingly
-
-} // loop close
-
+  dowarnings(REC_CHK);                                              // check last good record and warn accordingly
+}                                                                   // Main loop close
 //***************************************************************************************************************************************
+// functions
 
+void sdtest(){
+    digitalWrite(LED_ACTIVITY,HIGH);                                      // yellow led for rtc test start
+   
+  // ********************************************************************************
+  digitalWrite(LED_PACKET, HIGH);                                       // green led on for sd checks
+  Serial.print("Initializing SD card...");
+  if (!SD.begin(chipSelect)) {dowarnings(DISK_ERR );}                   // If card fails Fatal error do disk error
+  Serial.println("card initialized.");
+  //*******************************************************************************
+  digitalWrite(LED_PACKET, LOW);                                        // green led off post sd checks
+
+}
+
+void clocktest(){
+  
+  #ifdef AVR                                                            //rtc on the wire/i2c bus
+    Wire.begin();
+  #else                                                                 // else rtc on the wire1/i2c bus
+    Wire1.begin();                                                      // Shield I2C pins connect to alt I2C bus on Arduino
+  #endif
+    rtc.begin();
+    if (! rtc.isrunning()) {                                            // If clock nor running/set setting date time
+        setrtc();
+    }
+  if (! rtc.isrunning()) {dowarnings(CLK_ERR );}                        // clock still not up? Fatal Error do clock error
+  Datetimetest();                                                       //chuck out verbose clock info via usb/serial for debugging
+  digitalWrite(LED_ACTIVITY,LOW);                                       // turn off yellow clock check led
+}
 
 void dowarnings(int action){
   /*routine to handle led warnings and resets
@@ -256,26 +248,27 @@ void dowarnings(int action){
     Serial.println("Card failed, or not present");
     // Signal Card Error  Flash green led LED_PACKET:
     digitalWrite(LED_ACTIVITY, LOW);
-    while (true) {                                                  // flash leds for bad or no card indefinatly
+    while (true) {                                                    // flash leds for bad or no card indefinatly
       /*
        * FATAL ERROR cant write data..
        */
       digitalWrite(LED_PACKET, HIGH);                                 // Flash Green led for error condition no/bad sd card
-      digitalWrite(LED_RED1, HIGH);                                 // Flash red1 led for for error condition no/bad sd card
+      digitalWrite(LED_RED1, HIGH);                                   // Flash red1 led for for error condition no/bad sd card
       delay(500);
-      digitalWrite(LED_PACKET, LOW);                                 // Flash Green led ffor error condition no/bad sd card
-      digitalWrite(LED_RED1, LOW);                                  // Flash red1 led for error condition no/bad sd card
-
+      digitalWrite(LED_PACKET, LOW);                                  // Flash Green led ffor error condition no/bad sd card
+      digitalWrite(LED_RED1, LOW);                                    // Flash red1 led for error condition no/bad sd card
+      delay(500);
     }
 
     break;
-  case CLK_ERR:                                                         // clock error
+  case CLK_ERR:                                                       // clock error FATAL!!
     while(true) {                                                     // forever
       digitalWrite(LED_ACTIVITY, HIGH);                               // Flash yellow led for error condition No RTC
       digitalWrite(LED_RED1, HIGH);                                   // Flash red1 led for for error condition No RTC
       delay(333);
       digitalWrite(LED_ACTIVITY, LOW);                                // Flash yellow led ffor error condition No RTC
       digitalWrite(LED_RED1, LOW);                                    // Flash red1 led for error condition no/bad No RTC
+      delay(333);
       }
     break;
   case FILE_ERR:
@@ -286,8 +279,9 @@ void dowarnings(int action){
                    * FAtal Error ?? or is it should it be retried???
                    */
                   digitalWrite(LED_RED1, HIGH);                       // Flash red1 led for for error condition file open error
-                  delay(200);
+                  delay(333);
                   digitalWrite(LED_RED1, LOW);                        // Flash red1 led for error condition file open error
+                  delay(333);
                   }
    break; 
    case REC_CHK:
@@ -366,7 +360,7 @@ int logrecord(){
           // Write validated data record..
           // log time
           dataFile.print(now.unixtime());                        // timestamp
-          dataFile.print(", ");                                 // comma data delimeter
+          dataFile.print(",");                                 // comma data delimeter
                                                                // eye friendly date time
           if(now.day() < 10) dataFile.print("0");
           dataFile.print(now.day(), DEC);
@@ -407,7 +401,7 @@ int logrecord(){
         else {
           Serial.println("error opening datalog.txt");
           // add file error handling
-          return 1;
+          return 1;  // error condition to trigger dowarnings(FILE_ERR)
         } // close else
 
 }
@@ -579,3 +573,4 @@ void ledtest(){
 
  
 }
+
